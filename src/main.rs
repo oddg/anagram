@@ -1,6 +1,7 @@
 extern crate anagram;
+extern crate md5;
 
-use anagram::{EquivalenceClass, SubsetEnumerator};
+use anagram::{EquivalenceClass, SubsetEnumerator, SwapIterator};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -9,6 +10,9 @@ use std::{
 
 const ANAGRAM: &str = "poultry outwits ants";
 const WORDFILE_PATH: &str = "./wordlist";
+const EASY_MD5_HASH: md5::Digest = md5::Digest([
+    0xe4, 0x82, 0x0b, 0x45, 0xd2, 0x27, 0x7f, 0x38, 0x44, 0xea, 0xc6, 0x6c, 0x90, 0x3e, 0x84, 0xbe,
+]);
 
 fn read_words<P: AsRef<Path>>(
     path: P,
@@ -40,14 +44,33 @@ fn main() {
         .map(|e| EquivalenceClass::new(e).unwrap())
         .sum();
     let (words, set) = read_words(WORDFILE_PATH, anagram);
-    println!("num words: {}", words.len());
     let enumerator = SubsetEnumerator::new(&set, anagram);
 
-    for subset in enumerator.take(10) {
-        println!("{:?}", subset);
-        for i in subset {
-            print!("{}", words[i]);
+    let test_subset = |subset: &[usize], buffer: &mut String| -> bool {
+        buffer.clear();
+        for i in subset.iter() {
+            buffer.push_str(&words[*i]);
         }
-        println!("");
+        if EASY_MD5_HASH == md5::compute(buffer.as_bytes()) {
+            print!("Easy: {}", buffer);
+            true
+        } else {
+            false
+        }
+    };
+
+    for mut subset in enumerator.take(10_000) {
+        let mut s = String::new();
+        if test_subset(&subset, &mut s) {
+            return ();
+        }
+        for (i, j) in SwapIterator::new(subset.len()) {
+            let t = subset[i];
+            subset[i] = subset[j];
+            subset[j] = t;
+            if test_subset(&subset, &mut s) {
+                return ();
+            }
+        }
     }
 }
